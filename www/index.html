@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>MediPin — Nearest Hospital Finder</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">📍 MediPin</div>
+    <button id="themeToggle" class="icon-btn" aria-label="Toggle dark mode">🌙</button>
+  </header>
+
+  <main>
+    <section class="search-card">
+      <h1>Find the Nearest Hospital</h1>
+      <p class="subtitle">Enter any Indian PIN code — top hospitals, ranked by distance.</p>
+
+      <form id="searchForm" autocomplete="off">
+        <input
+          id="pincodeInput"
+          type="tel"
+          inputmode="numeric"
+          maxlength="6"
+          placeholder="Enter 6-digit PIN code (e.g. 110001)"
+          required
+        />
+        <button type="submit" id="searchBtn">Search</button>
+      </form>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="results">Results</button>
+        <button class="tab" data-tab="favorites">Favorites</button>
+      </div>
+    </section>
+
+    <div id="statusBox" class="status hidden"></div>
+
+    <section id="resultsPanel" class="panel"></section>
+    <section id="favoritesPanel" class="panel hidden"></section>
+
+    <!-- AdMob banner is native (shown via Capacitor plugin), this div is just a
+         placeholder/spacer so content doesn't sit under the banner -->
+    <div id="adSpacer"></div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
