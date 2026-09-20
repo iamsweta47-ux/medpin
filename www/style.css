@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Hospital Finder · Pincode</title>
+  <!-- style.css (exactly as provided) -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- TOP BAR with dark mode toggle -->
+  <header class="topbar">
+    <span class="brand">🏥 Hospital Finder</span>
+    <button class="icon-btn" id="themeToggle" aria-label="Toggle dark mode">🌙</button>
+  </header>
+
+  <main>
+    <!-- SEARCH CARD -->
+    <div class="search-card">
+      <h1>Find hospitals near you</h1>
+      <p class="subtitle">Enter a pincode to see nearby medical facilities</p>
+
+      <form id="searchForm">
+        <input type="text" id="pincodeInput" placeholder="e.g. 110001" inputmode="numeric" autocomplete="postal-code" aria-label="Pincode">
+        <button type="submit" id="searchBtn">Search</button>
+      </form>
+
+      <!-- TABS: ALL / FAVOURITES -->
+      <div class="tabs">
+        <button class="tab active" data-tab="all">All hospitals</button>
+        <button class="tab" data-tab="fav">★ Favourites</button>
+      </div>
+
+      <!-- STATUS MESSAGE (loading / error / empty) -->
+      <div id="statusMessage" class="status hidden" role="status"></div>
+    </div>
+
+    <!-- HOSPITAL LIST PANEL -->
+    <div id="hospitalPanel" class="panel"></div>
+    <div id="adSpacer"></div>
+  </main>
+
+  <script>
+    (function() {
+      // ----- MOCK DATA (hospitals with pincode mapping) -----
+      const HOSPITAL_DB = [
+        // 110001 – Delhi
+        { id: 'h1', name: 'AIIMS Delhi', address: 'Ansari Nagar, New Delhi', pincode: '110001', distance: '1.2 km', phone: '+911126588500' },
+        { id: 'h2', name: 'Safdarjung Hospital', address: 'Ansari Nagar West, New Delhi', pincode: '110001', distance: '2.0 km', phone: '+911126507500' },
+        { id: 'h3', name: 'Max Super Speciality', address: 'Saket, New Delhi', pincode: '110001', distance: '3.8 km', phone: '+911126515050' },
+        // 400001 – Mumbai
+        { id: 'h4', name: 'Bombay Hospital', address: 'Marine Lines, Mumbai', pincode: '400001', distance: '0.9 km', phone: '+912222067676' },
+        { id: 'h5', name: 'JJ Hospital', address: 'Byculla, Mumbai', pincode: '400001', distance: '2.4 km', phone: '+912223735000' },
+        { id: 'h6', name: 'Lilavati Hospital', address: 'Bandra West, Mumbai', pincode: '400001', distance: '4.1 km', phone: '+912226751000' },
+        // 560001 – Bangalore
+        { id: 'h7', name: 'Manipal Hospital', address: 'Old Airport Road, Bangalore', pincode: '560001', distance: '1.6 km', phone: '+918025024444' },
+        { id: 'h8', name: 'St. John’s Medical', address: 'Koramangala, Bangalore', pincode: '560001', distance: '2.9 km', phone: '+918022065500' },
+        // 600001 – Chennai
+        { id: 'h9', name: 'Apollo Hospital', address: 'Greams Road, Chennai', pincode: '600001', distance: '1.3 km', phone: '+914428293333' },
+        { id: 'h10', name: 'Government General Hospital', address: 'Park Town, Chennai', pincode: '600001', distance: '0.7 km', phone: '+914425305000' },
+        // 700001 – Kolkata
+        { id: 'h11', name: 'SSKM Hospital', address: 'Bhowanipore, Kolkata', pincode: '700001', distance: '1.8 km', phone: '+913322041111' },
+        { id: 'h12', name: 'Fortis Hospital', address: 'Anandapur, Kolkata', pincode: '700001', distance: '3.5 km', phone: '+913366284444' },
+        // 500001 – Hyderabad
+        { id: 'h13', name: 'Osmania General Hospital', address: 'Afzalgunj, Hyderabad', pincode: '500001', distance: '2.1 km', phone: '+914024600146' },
+        { id: 'h14', name: 'Apollo Hospital', address: 'Jubilee Hills, Hyderabad', pincode: '500001', distance: '5.0 km', phone: '+914023607777' },
+      ];
+
+      // ----- STATE -----
+      let currentTab = 'all';                // 'all' or 'fav'
+      let favourites = new Set();            // store hospital IDs
+      let lastSearchPincode = '';            // remember last searched pincode
+      let lastSearchResults = [];            // array of hospital objects from last search
+
+      // ----- DOM ELEMENTS -----
+      const searchForm = document.getElementById('searchForm');
+      const pincodeInput = document.getElementById('pincodeInput');
+      const searchBtn = document.getElementById('searchBtn');
+      const statusMessage = document.getElementById('statusMessage');
+      const hospitalPanel = document.getElementById('hospitalPanel');
+      const tabs = document.querySelectorAll('.tab');
+      const themeToggle = document.getElementById('themeToggle');
+
+      // ----- UTILITIES -----
+
+      // Load favourites from localStorage
+      function loadFavourites() {
+        try {
+          const stored = localStorage.getItem('hospitalFavs');
+          if (stored) {
+            const arr = JSON.parse(stored);
+            if (Array.isArray(arr)) favourites = new Set(arr);
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      // Save favourites to localStorage
+      function saveFavourites() {
+        localStorage.setItem('hospitalFavs', JSON.stringify([...favourites]));
+      }
+
+      // Show status message (and optionally hide after delay)
+      function showStatus(text, isError = false, autoHide = false) {
+        statusMessage.textContent = text;
+        statusMessage.classList.toggle('error', isError);
+        statusMessage.classList.remove('hidden');
+        if (autoHide) {
+          setTimeout(() => {
+            if (statusMessage.textContent === text) statusMessage.classList.add('hidden');
+          }, 3000);
+        }
+      }
+
+      function hideStatus() {
+        statusMessage.classList.add('hidden');
+      }
+
+      // Get pincode from input (remove spaces, non-digits)
+      function sanitizePincode(value) {
+        return value.replace(/\D/g, '').slice(0, 6);
+      }
+
+      // Filter hospitals by pincode (mock: exact match)
+      function getHospitalsByPincode(pincode) {
+        if (!pincode || pincode.length < 6) return [];
+        // simulate filtering (pincode match)
+        return HOSPITAL_DB.filter(h => h.pincode === pincode);
+      }
+
+      // Get favourite hospitals (from lastSearchResults and from all DB — but better to show favourites among last results? For simplicity, we'll show favourites from last search if available, otherwise from whole DB? We choose to show favourites from entire DB that match? We'll show all favourites, but if last search results exist and pincode matches, we can show only those? 
+      // We'll implement: if currentTab === 'fav', show favourite hospitals from lastSearchResults (if any) AND if there is no last search, show favourites from all DB with their pincode? That's messy. 
+      // Better: When user switches to fav tab, we show ALL favourited hospitals from the entire mock DB, regardless of pincode. But the UI is about pincode search. Let's improve: In fav tab, show favourites from the last search results if available; if no search yet, show an empty state encouraging to search. This keeps context.
+      // We'll use lastSearchResults (which is already filtered by last pincode) but only those that are favourite.
+
+      // ----- RENDER HOSPITAL LIST -----
+      function renderHospitals() {
+        let hospitalsToShow = [];
+
+        if (currentTab === 'fav') {
+          // Show favourites from last search results (or if no search yet, empty)
+          if (lastSearchResults.length === 0) {
+            hospitalPanel.innerHTML = `<div class="empty-state">🔍 Search for hospitals first, then star your favourites.</div>`;
+            return;
+          }
+          hospitalsToShow = lastSearchResults.filter(h => favourites.has(h.id));
+          if (hospitalsToShow.length === 0) {
+            hospitalPanel.innerHTML = `<div class="empty-state">⭐ No favourites in this search. Tap the star on any hospital card to save it.</div>`;
+            return;
+          }
+        } else {
+          // 'all' tab
+          if (lastSearchResults.length === 0) {
+            // Show a friendly empty state, no status message needed (or use status?)
+            hospitalPanel.innerHTML = `<div class="empty-state">📍 Enter a pincode above to find hospitals.</div>`;
+            return;
+          }
+          hospitalsToShow = lastSearchResults;
+        }
+
+        // Build hospital cards
+        hospitalPanel.innerHTML = hospitalsToShow.map(h => {
+          const isFav = favourites.has(h.id);
+          const starIcon = isFav ? '★' : '☆';
+          const starColor = isFav ? 'var(--star)' : 'var(--muted)';
+          // Google maps link
+          const mapQuery = encodeURIComponent(h.name + ', ' + h.address);
+          const mapUrl = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
+          // Call link
+          const phoneClean = h.phone.replace(/\s+/g, '');
+          return `
+            <div class="hospital-card" data-id="${h.id}">
+              <div class="row-top">
+                <div style="flex:1; min-width:0;">
+                  <h3>${h.name}</h3>
+                  <p class="addr">${h.address}</p>
+                  <span class="distance">${h.distance} away</span>
+                </div>
+                <button class="fav-btn" data-id="${h.id}" aria-label="${isFav ? 'Remove from favourites' : 'Add to favourites'}" style="color:${starColor}; font-size:24px;">${starIcon}</button>
+              </div>
+              <div class="card-actions">
+                <a href="${mapUrl}" target="_blank" rel="noopener" class="primary">📍 Map</a>
+                <a href="tel:${phoneClean}">📞 Call</a>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Attach event listeners to favourite buttons (delegation or direct)
+        document.querySelectorAll('.fav-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.id;
+            if (favourites.has(id)) {
+              favourites.delete(id);
+            } else {
+              favourites.add(id);
+            }
+            saveFavourites();
+            // Re-render to update star icon and possibly remove from fav tab
+            renderHospitals();
+          });
+        });
+      }
+
+      // ----- PERFORM SEARCH -----
+      function performSearch(pincode) {
+        const cleanPin = sanitizePincode(pincode);
+        if (cleanPin.length < 6) {
+          showStatus('Please enter a valid 6-digit pincode.', true, true);
+          lastSearchResults = [];
+          lastSearchPincode = '';
+          renderHospitals();
+          return;
+        }
+
+        // Simulate loading (with small delay)
+        searchBtn.disabled = true;
+        showStatus('🔎 Searching…', false);
+        hospitalPanel.innerHTML = ''; // clear while loading
+
+        setTimeout(() => {
+          const results = getHospitalsByPincode(cleanPin);
+          lastSearchResults = results;
+          lastSearchPincode = cleanPin;
+
+          if (results.length === 0) {
+            showStatus('No hospitals found for this pincode. Try 110001, 400001, 560001, 600001, 700001, 500001.', true, false);
+          } else {
+            hideStatus();
+          }
+
+          // Update the input to reflect the clean pincode
+          pincodeInput.value = cleanPin;
+
+          // If current tab is 'fav', we still show favourites from these results
+          renderHospitals();
+          searchBtn.disabled = false;
+        }, 250); // simulate network
+      }
+
+      // ----- TAB SWITCHING -----
+      function setActiveTab(tabName) {
+        currentTab = tabName;
+        tabs.forEach(tab => {
+          const isActive = tab.dataset.tab === tabName;
+          tab.classList.toggle('active', isActive);
+        });
+        renderHospitals();
+      }
+
+      // ----- THEME TOGGLE (dark/light) -----
+      function initTheme() {
+        const storedTheme = localStorage.getItem('theme');
+        if (storedTheme === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          themeToggle.textContent = '☀️';
+        } else {
+          document.documentElement.removeAttribute('data-theme');
+          themeToggle.textContent = '🌙';
+        }
+      }
+
+      function toggleTheme() {
+        if (document.documentElement.getAttribute('data-theme') === 'dark') {
+          document.documentElement.removeAttribute('data-theme');
+          localStorage.setItem('theme', 'light');
+          themeToggle.textContent = '🌙';
+        } else {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          localStorage.setItem('theme', 'dark');
+          themeToggle.textContent = '☀️';
+        }
+      }
+
+      // ----- EVENT LISTENERS -----
+      searchForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const rawPin = pincodeInput.value;
+        performSearch(rawPin);
+      });
+
+      // Input sanitation (optional: allow only digits)
+      pincodeInput.addEventListener('input', (e) => {
+        e.target.value = sanitizePincode(e.target.value);
+      });
+
+      // Tab clicks
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          setActiveTab(tab.dataset.tab);
+        });
+      });
+
+      // Theme toggle
+      themeToggle.addEventListener('click', toggleTheme);
+
+      // ----- INITIALIZATION -----
+      function init() {
+        loadFavourites();
+        initTheme();
+
+        // If there's a pincode in URL? Not needed.
+
+        // Show initial empty state (no search yet)
+        lastSearchResults = [];
+        lastSearchPincode = '';
+        setActiveTab('all');  // triggers renderHospitals -> empty state
+
+        // Prefill with a sample pincode? No, keep clean.
+        // But we can add a placeholder hint.
+      }
+
+      init();
+
+      // Expose for debugging (optional)
+      window.__app = { favourites, lastSearchResults };
+    })();
+  </script>
+</body>
+</html>
