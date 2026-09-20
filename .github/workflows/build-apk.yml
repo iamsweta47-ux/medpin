@@ -54,8 +54,8 @@ jobs:
           ADMOB_APP_ID: ${{ vars.ADMOB_APP_ID }}
         run: |
           if [ -n "$ADMOB_APP_ID" ]; then
-            sed -i "/<application/a\        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"$ADMOB_APP_ID\"/>" \
-              android/app/src/main/AndroidManifest.xml
+           sed -i "/<\/application>/i\        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"$ADMOB_APP_ID\"/>" \
+  android/app/src/main/AndroidManifest.xml  
             echo "✅ AdMob App ID inserted"
           else
             echo "⚠️ ADMOB_APP_ID not set — skipping AdMob injection"
@@ -64,8 +64,8 @@ jobs:
       # 10. Add required permissions to manifest
       - name: Add permissions to AndroidManifest
         run: |
-          sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' \
-            android/app/src/main/AndroidManifest.xml
+         sed -i '/<application/i\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' \
+  android/app/src/main/AndroidManifest.xml 
 
       # 11. Make gradlew executable
       - name: Make gradlew executable
