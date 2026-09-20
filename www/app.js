@@ -298,7 +298,7 @@ async function initAdMob() {
       initializeForTesting: false,
     });
     await AdMob.showBanner({
-      adId: "ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY", // <-- replace with your real AdMob banner unit ID
+      adId: "ca-app-pub-6989539634494384/6612985660", // <-- replace with your real AdMob banner unit ID
       adSize: "ADAPTIVE_BANNER",
       position: "BOTTOM_CENTER",
       margin: 0,
