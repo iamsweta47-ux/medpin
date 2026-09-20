@@ -1,0 +1,113 @@
+name: Build MediPin APK
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Debug & Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # 3. Setup Java 17 (Capacitor 6 requires JDK 17)
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # 4. Setup Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # 5. Install npm dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # 6. Build web assets (agar aapke paas build script hai)
+      - name: Build web assets
+        run: npm run build --if-present
+
+      # 7. Add Capacitor Android platform
+      - name: Add Android platform
+        run: npx cap add android
+
+      # 8. Sync web assets to Android
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      # 9. Insert AdMob App ID into AndroidManifest
+      - name: Insert AdMob App ID
+        env:
+          ADMOB_APP_ID: ${{ vars.ADMOB_APP_ID }}
+        run: |
+          if [ -n "$ADMOB_APP_ID" ]; then
+            sed -i "/<application/a\        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"$ADMOB_APP_ID\"/>" \
+              android/app/src/main/AndroidManifest.xml
+            echo "✅ AdMob App ID inserted"
+          else
+            echo "⚠️ ADMOB_APP_ID not set — skipping AdMob injection"
+          fi
+
+      # 10. Add required permissions to manifest
+      - name: Add permissions to AndroidManifest
+        run: |
+          sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' \
+            android/app/src/main/AndroidManifest.xml
+
+      # 11. Make gradlew executable
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      # 12. Build Debug APK
+      - name: Build Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --stacktrace
+
+      # 13. Upload Debug APK
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: medipin-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      # 14. (Optional) Build Release APK (unsigned)
+      - name: Build Release APK
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cd android
+          ./gradlew assembleRelease --stacktrace
+
+      # 15. (Optional) Upload Release APK
+      - name: Upload Release APK
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: medipin-release-apk
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 30
+
+      # 16. Upload build logs on failure
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: android/app/build/reports/
