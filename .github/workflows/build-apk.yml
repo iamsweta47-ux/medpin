@@ -30,10 +30,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-
-      # 4. Setup Android SDK
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+          
 
       # 5. Install npm dependencies
       - name: Install dependencies
