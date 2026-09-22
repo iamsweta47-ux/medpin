@@ -1,3 +1,8 @@
+import { UnityAds } from "@openanime/capacitor-plugin-unityads";
+UnityAds.initAds({ gameId: "800378504", testMode: false });
+UnityAds.addListener("initialized", () => {
+  UnityAds.loadAds({ adUnitId: "BP_Interstitial_Android" });
+});
 /* MediPin app logic
  * Data sources (no API key required):
  *  - Nominatim (OpenStreetMap) -> converts PIN code to lat/lon
